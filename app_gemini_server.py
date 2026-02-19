@@ -343,38 +343,52 @@ async def upload_large_file(request: Request, file: UploadFile = File(...)):
 
 @app.post("/api/chat")
 @limiter.limit("10/minute")
-async def chat_completion(request: Request, query_request: QueryRequest):
+async def chat_completion(request: Request):
     """
     Send a message and get a synchronous response
-    For streaming, use WebSocket endpoint instead
+    Supports both JSON and FormData
     Rate limit: 10 requests/minute per IP
     """
-    request = query_request  # Alias for compatibility
     if not LLM_INSTANCE:
         raise HTTPException(status_code=503, detail="LLM not loaded")
-    
-    if not request.message.strip():
-        raise HTTPException(status_code=400, detail="Empty message")
+
+    content_type = request.headers.get("content-type", "")
     
     try:
-        # Call LLM with optional forced backend
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            message = form.get("message", "").strip()
+            modalita = form.get("modalita", "generale")
+            forced_backend = form.get("backend", None) or form.get("forced_backend", None)
+            file = form.get("file")
+        else:
+            body = await request.json()
+            message = body.get("message", "").strip()
+            modalita = body.get("modalita", "generale")
+            forced_backend = body.get("backend", None) or body.get("forced_backend", None)
+            file = None
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Empty message")
+        
         result = LLM_INSTANCE.complete(
-            request.message.strip(),
-            modalita=request.modalita,
-            forced_backend=request.forced_backend
+            message,
+            modalita=modalita,
+            forced_backend=forced_backend
         )
         
-        # Extract metadata
         latency = LLM_INSTANCE.last_response_metadata.get("latency", "?")
         backend = LLM_INSTANCE.active_backend or "unknown"
         
         return {
-            "content": result.text,
+            "response": result.text,
             "backend": backend,
             "latency": latency,
-            "modalita": request.modalita,
+            "modalita": modalita,
             "success": True
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
