@@ -10,11 +10,16 @@ Paired with HTML/CSS/JS frontend for Gemini-style UI
 from dotenv import load_dotenv
 load_dotenv(verbose=True)
 
-from fastapi import FastAPI, WebSocket, HTTPException, UploadFile, File
+from fastapi import FastAPI, WebSocket, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+
+# Rate limiting
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import json
 import asyncio
 import logging
@@ -64,6 +69,22 @@ logging.getLogger().addHandler(queue_handler)
 
 # Initialize FastAPI
 app = FastAPI(title="AgenteIA Enterprise", version="5.0")
+
+# Rate limiter configuration
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+# Rate limit exception handler
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "Rate limit exceeded",
+            "message": f"Too many requests. Limit: {exc.detail}",
+            "retry_after": getattr(exc, "retry_after", 60)
+        }
+    )
 
 # Increase WebSocket message size limit (default is 16MB, we allow up to 100MB)
 from starlette.websockets import WebSocketState
@@ -277,10 +298,12 @@ async def get_backends():
     }
 
 @app.post("/api/upload-file")
-async def upload_large_file(file: UploadFile = File(...)):
+@limiter.limit("5/minute")
+async def upload_large_file(request: Request, file: UploadFile = File(...)):
     """
     Upload large files (> 5MB) via multipart/form-data
     Returns a file_id to reference in WebSocket messages
+    Rate limit: 5 requests/minute per IP
     
     File ID is embedded in filename as: {uuid}_{originalname}
     This ensures file survives server restart - no in-memory map needed
@@ -319,11 +342,14 @@ async def upload_large_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat")
-async def chat_completion(request: QueryRequest):
+@limiter.limit("10/minute")
+async def chat_completion(request: Request, query_request: QueryRequest):
     """
     Send a message and get a synchronous response
     For streaming, use WebSocket endpoint instead
+    Rate limit: 10 requests/minute per IP
     """
+    request = query_request  # Alias for compatibility
     if not LLM_INSTANCE:
         raise HTTPException(status_code=503, detail="LLM not loaded")
     
@@ -661,19 +687,14 @@ async def websocket_chat(websocket: WebSocket):
 # ============================================================# MANUAL ESCALATION ENDPOINT
 # ============================================================
 @app.post("/api/deepen")
-async def deepen_response(request: QueryRequest):
+@limiter.limit("5/minute")
+async def deepen_response(request: Request, query_request: QueryRequest):
     """
     Manual escalation endpoint: User clicks "Approfondisci" button
     Takes previous response and escalates to Mistral/Gemini for deeper analysis
-    
-    Request:
-    {
-        "message": "original question",
-        "previous_response": "shallow response text",
-        "file_id": "xxx" or "file_base64": "...",
-        "file_name": "document.pdf"
-    }
+    Rate limit: 5 requests/minute per IP
     """
+    request = query_request
     if not LLM_INSTANCE:
         raise HTTPException(status_code=503, detail="LLM not loaded")
     
@@ -745,20 +766,15 @@ async def root():
 # ============================================================
 
 @app.post("/api/image-analysis")
-async def analyze_image(request: QueryRequest):
+@limiter.limit("10/minute")
+async def analyze_image(request: Request, query_request: QueryRequest):
     """
     Analyze image artistically using Vision-Language models
     Supports: DeepSeek-VL2, Gemini Vision, HuggingFace Vision
     Best for: Artwork analysis, composition, style, techniques
-    
-    Request:
-    {
-        "message": "Analizza questo quadro dal punto di vista artistico",
-        "file_base64": "<base64 encoded image>",
-        "file_name": "artwork.jpg",
-        "modalita": "analisi"  (optional, default "analisi")
-    }
+    Rate limit: 10 requests/minute per IP
     """
+    request = query_request
     if not LLM_INSTANCE:
         raise HTTPException(status_code=503, detail="LLM not loaded")
     

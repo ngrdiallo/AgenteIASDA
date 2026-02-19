@@ -29,3 +29,4 @@ sentence-transformers>=2.2.0
 pydantic>=2.0.0
 gpt4all>=2.0.0
 psutil>=5.9.0
+slowapi>=0.1.9
