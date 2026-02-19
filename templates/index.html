@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgenteIA Enterprise - v5</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <h1>AgenteIA</h1>
+            <p>v5 Enterprise</p>
+        </div>
+        
+        <button id="new-chat-btn" class="new-chat-btn">➕ Nuova chat</button>
+        
+        <div class="sidebar-section">
+            <h3>Modalità</h3>
+            <select id="modalita-selector" class="modalita-selector"></select>
+            <div id="modalita-info" class="modalita-info"></div>
+        </div>
+        
+        <div class="sidebar-section">
+            <h3>Backend</h3>
+            <select id="backend-selector" class="backend-selector">
+                <option value="">Auto (Fallback)</option>
+            </select>
+            <p class="info-text" style="font-size: 0.85em; color: #666; margin-top: 8px;">
+                Seleziona un backend specifico o lascia "Auto" per il fallback automatico
+            </p>
+        </div>
+
+        <div class="sidebar-section">
+            <h3>⚡ Quick Actions</h3>
+            <button id="quick-image-analysis-btn" class="quick-action-btn">
+                📸 Analizza Immagine
+            </button>
+            <button id="quick-image-generation-btn" class="quick-action-btn">
+                🎨 Genera Immagine
+            </button>
+        </div>
+        
+        <div class="sidebar-section">
+            <h3>Info</h3>
+            <p class="info-text">AgenteIA v5 Enterprise | 8-Tier Fallback | Truth-Only | Vision-Capable</p>
+        </div>
+    </aside>
+
+    <!-- Main chat area -->
+    <main class="main-container">
+        <!-- Header -->
+        <header class="chat-header">
+            <button id="sidebar-toggle" class="sidebar-toggle">☰</button>
+            <div class="chat-title-box">
+                <h2 id="chat-title">Nuova chat</h2>
+                <p id="chat-subtitle">Risposte veritiere in italiano</p>
+            </div>
+            <button id="logs-toggle-btn" class="logs-toggle-btn" title="Mostra/nascondi log">🔍 Log</button>
+        </header>
+
+        <!-- Chat messages -->
+        <div id="chat-area" class="chat-area">
+            <div class="empty-state">
+                <h2>Ciao! Sono AgenteIA</h2>
+                <p>Seleziona una modalità dalla sidebar e fai una domanda.<br>Riceverai risposte dettagliate e veritiere in italiano.</p>
+            </div>
+        </div>
+
+        <!-- Bottom input area (FIXED) -->
+        <footer class="input-footer">
+            <div class="input-container">
+                <div class="input-row">
+                    <!-- Text input -->
+                    <div class="input-field-wrapper">
+                        <input
+                            id="message-input"
+                            type="text"
+                            class="message-input"
+                            placeholder="Scrivi una domanda..."
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <!-- Tools -->
+                    <div class="input-tools">
+                        <!-- File upload -->
+                        <label class="tool-btn" title="Allega file">
+                            <input 
+                                id="file-input"
+                                type="file"
+                                accept="image/*,.pdf,.doc,.docx,.ppt,.pptx"
+                                style="display: none;"
+                            >
+                            📎
+                        </label>
+
+                        <!-- Send button -->
+                        <button id="send-btn" class="tool-btn send-btn" title="Invia (Ctrl+Enter)">
+                            ⬆️
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mini modalita selector in footer -->
+                <div class="footer-info">
+                    <span id="current-modalita-label" class="modalita-label">Generale</span>
+                    <span id="response-status" class="response-status"></span>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Log Viewer Panel -->
+        <div id="logs-panel" class="logs-panel hidden">
+            <div class="logs-header">
+                <h3>📋 Server Log Stream</h3>
+                <button id="logs-clear-btn" class="logs-clear-btn">Pulisci</button>
+                <button id="logs-close-btn" class="logs-close-btn">✕</button>
+            </div>
+            <div id="logs-content" class="logs-content"></div>
+        </div>
+    </main>
+
+    <!-- Scripts -->
+    <script src="/static/app.js"></script>
+</body>
+</html>

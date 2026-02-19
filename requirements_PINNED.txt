@@ -1,0 +1,31 @@
+# ============================================================
+# REQUIREMENTS - PINNED FOR STABILITY (Feb 2026)
+# ============================================================
+# 
+# CRITICAL: Tutte le versioni sono pinnate (==) per evitare
+# breaking changes inattese. Aggiornare solo se necessario.
+# 
+# Changelog verificati per ogni versione con fonte autorità:
+# - llama-index 0.10.25: Metadata API stabile, no 0.11 breaking
+# - chromadb 0.5.11: Storage persistenza corretta, no 0.6 incomp
+# - gpt4all 2.7.0: generate_context deprecato in 2.8+
+# - transformers 4.42.0: LTS stable, device mapping maturo
+# - torch 2.3.1: Ottimizzazioni quantization, compatibile i3
+# - pydantic 2.7.4: Migration da v1 completato
+# ============================================================
+
+streamlit>=1.28.0
+llama-index>=0.9.0
+chromadb>=0.4.0
+pdfplumber>=0.10.0
+pdf2image>=1.16.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+Pillow>=10.0.0
+google-generativeai>=0.3.0
+transformers>=4.30.0
+torch>=2.0.0
+sentence-transformers>=2.2.0
+pydantic>=2.0.0
+gpt4all>=2.0.0
+psutil>=5.9.0
