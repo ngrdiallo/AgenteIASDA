@@ -1,5 +1,5 @@
 // ============================================================
-// AGENTEIA - Modern Chat Interface
+// AGENTEIA - Artificial Scholar Interface
 // ============================================================
 
 class AgenteIA {
@@ -8,7 +8,14 @@ class AgenteIA {
         this.currentMode = 'chat';
         this.currentBackend = 'auto';
         this.isLoading = false;
-        this.attachedFile = null;
+        
+        // Multiple files support
+        this.uploadedFiles = []; // {id, name, type, knowledge}
+        
+        // Current conversation context
+        this.conversationContext = "";
+        
+        this.chatId = this.loadChatId();
         
         this.init();
     }
@@ -16,7 +23,9 @@ class AgenteIA {
     init() {
         this.bindElements();
         this.bindEvents();
+        this.loadChatHistory();
         this.updateStatus('Pronto');
+        this.updateFilesDisplay();
     }
 
     bindElements() {
@@ -45,6 +54,12 @@ class AgenteIA {
     }
 
     bindEvents() {
+        // Auto-grow input
+        this.messageInput.addEventListener('input', () => {
+            this.messageInput.style.height = 'auto';
+            this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 150) + 'px';
+        });
+
         // Send message
         this.sendBtn.addEventListener('click', () => this.sendMessage());
         this.messageInput.addEventListener('keydown', (e) => {
@@ -54,9 +69,9 @@ class AgenteIA {
             }
         });
 
-        // File upload
+        // File upload - allow multiple
         this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
-        this.removeFileBtn.addEventListener('click', () => this.removeFile());
+        this.removeFileBtn.addEventListener('click', () => this.removeAllFiles());
 
         // Sidebar
         this.menuBtn.addEventListener('click', () => this.toggleSidebar());
@@ -79,6 +94,9 @@ class AgenteIA {
                 this.messageInput.focus();
             });
         });
+
+        // Save chat before leaving
+        window.addEventListener('beforeunload', () => this.saveChatHistory());
     }
 
     // ============================================================
@@ -87,50 +105,157 @@ class AgenteIA {
 
     async sendMessage() {
         const message = this.messageInput.value.trim();
-        if (!message && !this.attachedFile) return;
+        if (!message) return;
         if (this.isLoading) return;
 
         this.hideWelcome();
         this.addMessage(message, 'user');
         this.messageInput.value = '';
+        this.messageInput.style.height = 'auto';
         this.setLoading(true);
 
         try {
-            const formData = new FormData();
-            formData.append('message', message);
-            formData.append('modalita', this.currentMode);
-            formData.append('backend', this.currentBackend);
+            // Build context from uploaded files
+            let contextFromFiles = "";
+            if (this.uploadedFiles.length > 0) {
+                contextFromFiles = "\n\n📄 DOCUMENTI ALLEGATI:\n";
+                this.uploadedFiles.forEach((f, i) => {
+                    contextFromFiles += `\n[DOCUMENTO ${i+1}: ${f.name}]\n`;
+                    if (f.knowledge) {
+                        if (f.knowledge.movements) contextFromFiles += `- Movimenti: ${f.knowledge.movements.join(', ')}\n`;
+                        if (f.knowledge.years) contextFromFiles += `- Periodi: ${f.knowledge.years.slice(0,10).join(', ')}\n`;
+                        if (f.knowledge.key_concepts) contextFromFiles += `- Concetti: ${f.knowledge.key_concepts.slice(0,10).join(', ')}\n`;
+                    }
+                    contextFromFiles += "\n";
+                });
+            }
 
-            if (this.attachedFile) {
-                formData.append('file', this.attachedFile);
+            // Build prompt with context
+            let fullPrompt = message;
+            if (contextFromFiles) {
+                fullPrompt = `L'utente chiede: "${message}"${contextFromFiles}
+
+Rispondi analizzando i documenti allegati e crea collegamenti tra di essi.`;
             }
 
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                body: formData
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    message: fullPrompt,
+                    has_documents: this.uploadedFiles.length > 0
+                })
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                const errorData = await response.json();
+                throw new Error(errorData.detail || errorData.error || `HTTP ${response.status}`);
             }
 
             const data = await response.json();
-            this.addMessage(data.response || data.message || 'Risposta ricevuta', 'assistant');
+            
+            if (data.response) {
+                // Add source info if we have documents
+                let responseText = data.response;
+                if (this.uploadedFiles.length > 0) {
+                    responseText += `\n\n📚 Fonti: ${this.uploadedFiles.map(f => f.name).join(', ')}`;
+                }
+                this.addMessage(responseText, 'assistant');
+            } else {
+                this.addMessage('Risposta ricevuta', 'assistant');
+            }
 
         } catch (error) {
             console.error('Error:', error);
-            this.addMessage(`Errore: ${error.message}`, 'assistant');
+            this.addMessage(`❌ Errore: ${error.message}`, 'assistant');
         } finally {
             this.setLoading(false);
-            this.removeFile();
+            this.saveChatHistory();
         }
+    }
+
+    async handleFileUpload(event) {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        this.addMessage(`📄 Caricamento di ${files.length} file...`, 'system');
+        this.setLoading(true);
+
+        try {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.uploadedFiles.push({
+                        id: data.file_id,
+                        name: data.filename,
+                        type: data.type,
+                        knowledge: data.knowledge || null
+                    });
+                }
+            }
+
+            this.updateFilesDisplay();
+            
+            // Show summary
+            let infoMsg = `✅ Caricati ${files.length} documento/i:\n`;
+            this.uploadedFiles.forEach((f, i) => {
+                infoMsg += `\n${i+1}. ${f.name}`;
+                if (f.knowledge) {
+                    if (f.knowledge.movements?.length) infoMsg += `\n   🎨 ${f.knowledge.movements.slice(0,3).join(', ')}`;
+                    if (f.knowledge.years?.length) infoMsg += `\n   📅 ${f.knowledge.years.slice(0,3).join(', ')}`;
+                }
+            });
+            infoMsg += '\n\nOra puoi fare domande sui documenti!';
+            
+            this.addMessage(infoMsg, 'system');
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.addMessage(`❌ Errore upload: ${error.message}`, 'assistant');
+        } finally {
+            this.setLoading(false);
+            // Clear input so user can select same files again
+            this.fileInput.value = '';
+        }
+    }
+
+    updateFilesDisplay() {
+        if (this.uploadedFiles.length > 0) {
+            // Show combined preview
+            const names = this.uploadedFiles.map(f => f.name).join(', ');
+            this.previewFilename.textContent = `${this.uploadedFiles.length} file: ${names.substring(0, 50)}${names.length > 50 ? '...' : ''}`;
+            this.filePreview.style.display = 'flex';
+            this.previewImage.style.display = 'none';
+        } else {
+            this.filePreview.style.display = 'none';
+        }
+    }
+
+    removeAllFiles() {
+        this.uploadedFiles = [];
+        this.updateFilesDisplay();
     }
 
     addMessage(content, role) {
         const messageEl = document.createElement('div');
         messageEl.className = `message ${role}`;
         
-        const avatarIcon = role === 'user' ? 'U' : 'AI';
+        const avatarIcon = role === 'user' ? 'U' : (role === 'system' ? '📄' : '🤓');
         
         messageEl.innerHTML = `
             <div class="message-avatar">${avatarIcon}</div>
@@ -140,6 +265,7 @@ class AgenteIA {
         `;
 
         this.messagesContainer.appendChild(messageEl);
+        this.messages.push({ content, role });
         this.scrollToBottom();
     }
 
@@ -148,13 +274,13 @@ class AgenteIA {
         thinkingEl.className = 'message assistant';
         thinkingEl.id = 'thinking-message';
         thinkingEl.innerHTML = `
-            <div class="message-avatar">AI</div>
+            <div class="message-avatar">🤓</div>
             <div class="message-content">
                 <div class="thinking">
                     <div class="thinking-dots">
                         <span></span><span></span><span></span>
                     </div>
-                    <span>Sto pensando...</span>
+                    <span>Sto analizzando e creando collegamenti...</span>
                 </div>
             </div>
         `;
@@ -231,7 +357,7 @@ class AgenteIA {
         });
 
         const modeNames = {
-            'chat': 'Chat',
+            'chat': 'Chat Libera',
             'analisi': 'Analisi Documenti',
             'vision': 'Analisi Immagini'
         };
@@ -245,37 +371,6 @@ class AgenteIA {
     }
 
     // ============================================================
-    // FILE HANDLING
-    // ============================================================
-
-    handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        this.attachedFile = file;
-        
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                this.previewImage.src = e.target.result;
-                this.previewImage.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        } else {
-            this.previewImage.style.display = 'none';
-        }
-
-        this.previewFilename.textContent = file.name;
-        this.filePreview.style.display = 'flex';
-    }
-
-    removeFile() {
-        this.attachedFile = null;
-        this.fileInput.value = '';
-        this.filePreview.style.display = 'none';
-    }
-
-    // ============================================================
     // SIDEBAR
     // ============================================================
 
@@ -284,15 +379,96 @@ class AgenteIA {
     }
 
     newChat() {
+        this.saveChatHistory();
         this.showWelcome();
         this.chatTitle.textContent = 'Nuova Conversazione';
         this.setMode('chat');
-        this.removeFile();
+        this.removeAllFiles();
+        this.conversationContext = "";
         this.updateStatus('Pronto');
+        this.chatId = Date.now().toString();
+        this.saveChatId();
         
         if (window.innerWidth <= 768) {
             this.sidebar.classList.remove('open');
         }
+    }
+
+    // ============================================================
+    // CHAT HISTORY (Local Storage)
+    // ============================================================
+
+    saveChatHistory() {
+        try {
+            const chatData = {
+                id: this.chatId,
+                messages: this.messages,
+                mode: this.currentMode,
+                backend: this.currentBackend,
+                files: this.uploadedFiles, // Save uploaded files info
+                timestamp: Date.now()
+            };
+            localStorage.setItem('agenteia_current_chat', JSON.stringify(chatData));
+        } catch (e) {
+            console.warn('Could not save chat:', e);
+        }
+    }
+
+    loadChatHistory() {
+        try {
+            const saved = localStorage.getItem('agenteia_current_chat');
+            if (saved) {
+                const chatData = JSON.parse(saved);
+                this.chatId = chatData.id || Date.now().toString();
+                this.messages = chatData.messages || [];
+                this.currentMode = chatData.mode || 'chat';
+                this.currentBackend = chatData.backend || 'auto';
+                this.uploadedFiles = chatData.files || [];
+                
+                // Restore UI
+                this.backendSelector.value = this.currentBackend;
+                this.setMode(this.currentMode);
+                this.updateFilesDisplay();
+                
+                // Render messages
+                if (this.messages.length > 0) {
+                    this.hideWelcome();
+                    this.messagesContainer.innerHTML = '';
+                    this.messages.forEach(msg => {
+                        const messageEl = document.createElement('div');
+                        messageEl.className = `message ${msg.role}`;
+                        const avatarIcon = msg.role === 'user' ? 'U' : (msg.role === 'system' ? '📄' : '🤓');
+                        messageEl.innerHTML = `
+                            <div class="message-avatar">${avatarIcon}</div>
+                            <div class="message-content">
+                                <div class="message-bubble">${this.formatContent(msg.content)}</div>
+                            </div>
+                        `;
+                        this.messagesContainer.appendChild(messageEl);
+                    });
+                    this.scrollToBottom();
+                }
+            }
+        } catch (e) {
+            console.warn('Could not load chat:', e);
+        }
+    }
+
+    loadChatId() {
+        try {
+            const saved = localStorage.getItem('agenteia_current_chat');
+            if (saved) {
+                const chatData = JSON.parse(saved);
+                return chatData.id || Date.now().toString();
+            }
+        } catch (e) {}
+        return Date.now().toString();
+    }
+
+    saveChatId() {
+        try {
+            localStorage.setItem('agenteia_chat_id', this.chatId);
+        } catch (e) {}
     }
 }
 

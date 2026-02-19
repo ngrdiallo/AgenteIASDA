@@ -210,7 +210,6 @@ html, body {
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
-    position: relative;
 }
 
 /* ============================================================
@@ -279,9 +278,20 @@ html, body {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 20px 24px 120px;
+    padding: 20px 24px 140px;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+}
+
+.messages {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 768px;
+    width: 100%;
+    margin: 0 auto;
+    padding-bottom: 20px;
 }
 
 /* Welcome Screen */
@@ -556,12 +566,11 @@ html, body {
    ============================================================ */
 
 .input-area {
-    position: fixed;
-    bottom: 0;
-    left: 260px;
-    right: 0;
+    position: relative;
     padding: 16px 24px 24px;
-    background: linear-gradient(to top, var(--bg-primary) 60%, transparent);
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
 .input-wrapper {
@@ -657,8 +666,14 @@ html, body {
     padding: 8px 4px;
     outline: none;
     resize: none;
-    min-height: 20px;
-    max-height: 200px;
+    min-height: 24px;
+    max-height: 150px;
+    overflow-y: auto;
+    line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    width: 100%;
 }
 
 #message-input::placeholder {

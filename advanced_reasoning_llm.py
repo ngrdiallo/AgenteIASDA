@@ -1219,11 +1219,14 @@ Sei specializzato in Fashion Design, storia della moda, modellistica, textile de
         if forced_backend:
             logger.info(f"🔒 FORCED MODE: Using only '{forced_backend}'...\n")
             for backend_name, query_fn in backends:
-                # More flexible matching
+                # More flexible matching - including partial matches
+                fb = forced_backend.lower().replace("-", "").replace("_", "")
+                bn = backend_name.lower().replace("-", "").replace("_", "").replace("(", "").replace(")", "").replace(".", "").replace("llama", "llama").replace("3.3", "33").replace("3", "3")
                 backend_match = (
                     backend_name.lower() == forced_backend.lower() or
-                    backend_name.replace(" ", "").lower() == forced_backend.replace(" ", "").lower() or
-                    backend_name.replace("(", "").replace(")", "").replace("-", " ").lower() == forced_backend.replace("(", "").replace(")", "").replace("-", " ").lower()
+                    forced_backend.lower() in backend_name.lower() or
+                    backend_name.lower().split()[0] == forced_backend.lower().split()[0] or  # "groq" matches "Groq llama-3.3-70b"
+                    fb in bn
                 )
                 if backend_match:
                     logger.info(f"[FORCED] Using: {backend_name}")
@@ -1379,7 +1382,7 @@ Sei specializzato in Fashion Design, storia della moda, modellistica, textile de
         if is_pdf:
             logger.info(f"   [PDF] Extracting text from PDF...")
             try:
-                from PyPDF2 import PdfReader
+                from pypdf import PdfReader
                 
                 # Extract text from PDF
                 pdf_reader = PdfReader(image_path)
